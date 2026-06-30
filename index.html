@@ -137,7 +137,7 @@
     const tempMatrix = new THREE.Matrix4();
 
     let grabbingController = null;
-    let grabOffset = new THREE.Vector3();
+    const grabDistance = 0.5;
 
     function getControllerRay(controller) {
       tempMatrix.identity().extractRotation(controller.matrixWorld);
@@ -156,14 +156,11 @@
       if (hits.length > 0) {
         grabbingController = controller;
         setCubeColor(highlightColor);
-        const worldPos = new THREE.Vector3();
-        cube.getWorldPosition(worldPos);
-        grabOffset.copy(worldPos).sub(origin);
       }
     }
 
     function onTriggerUp(event) {
-      if (grabbingController === event.target) {
+      if (grabbingController) {
         grabbingController = null;
         cube.material.forEach((m, i) => m.color.setHex(originalColors[i]));
       }
@@ -175,9 +172,8 @@
         cube.rotation.x = rotX;
         cube.rotation.y = rotY;
       } else if (grabbingController) {
-        const { origin } = getControllerRay(grabbingController);
-        cube.position.copy(origin).add(grabOffset);
-        cube.rotation.y += 0.01;
+        const { origin, direction } = getControllerRay(grabbingController);
+        cube.position.copy(origin).addScaledVector(direction, grabDistance);
       } else {
         cube.rotation.y += 0.005;
       }

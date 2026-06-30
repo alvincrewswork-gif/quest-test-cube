@@ -57,7 +57,6 @@
   <button id="vr-button" disabled>Checking VR support...</button>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/VRButton.js"></script>
   <script>
     const container = document.getElementById('cube-container');
     const scene = new THREE.Scene();
@@ -124,13 +123,37 @@
     });
 
     const vrButton = document.getElementById('vr-button');
+    let xrSession = null;
+
+    function onSessionEnded() {
+      xrSession = null;
+      vrButton.textContent = 'Enter VR';
+    }
+
+    async function onVRButtonClick() {
+      if (xrSession) {
+        xrSession.end();
+        return;
+      }
+      try {
+        const session = await navigator.xr.requestSession('immersive-vr', {
+          optionalFeatures: ['local-floor', 'bounded-floor']
+        });
+        xrSession = session;
+        session.addEventListener('end', onSessionEnded);
+        await renderer.xr.setSession(session);
+        vrButton.textContent = 'Exit VR';
+      } catch (err) {
+        vrButton.textContent = 'VR failed: ' + err.message;
+      }
+    }
+
     if (navigator.xr) {
       navigator.xr.isSessionSupported('immersive-vr').then(supported => {
         if (supported) {
           vrButton.disabled = false;
           vrButton.textContent = 'Enter VR';
-          const realButton = VRButton.createButton(renderer);
-          vrButton.addEventListener('click', () => realButton.click());
+          vrButton.addEventListener('click', onVRButtonClick);
         } else {
           vrButton.textContent = 'VR not supported on this browser';
         }

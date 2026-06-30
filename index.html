@@ -52,7 +52,7 @@
 </style>
 </head>
 <body>
-  <div id="info">Drag to rotate. In VR: point at the cube and pull the trigger.</div>
+  <div id="info">Drag to rotate. In VR: point at the cube, hold the trigger to grab and move it.</div>
   <div id="cube-container"></div>
   <button id="vr-button" disabled>Checking VR support...</button>
 
@@ -77,7 +77,6 @@
 
     const highlightColor = 0xffffff;
     let originalColors = colors.slice();
-    let isHighlighted = false;
 
     function setCubeColor(hex) {
       cube.material.forEach(m => m.color.setHex(hex));
@@ -127,7 +126,8 @@
       ray.name = 'ray';
       controller.add(ray);
 
-      controller.addEventListener('selectstart', onTrigger);
+      controller.addEventListener('selectstart', onTriggerDown);
+      controller.addEventListener('selectend', onTriggerUp);
       return controller;
     }
 
@@ -136,20 +136,36 @@
     const raycaster = new THREE.Raycaster();
     const tempMatrix = new THREE.Matrix4();
 
-    function onTrigger(event) {
-      const controller = event.target;
+    let grabbingController = null;
+    let grabOffset = new THREE.Vector3();
+
+    function getControllerRay(controller) {
       tempMatrix.identity().extractRotation(controller.matrixWorld);
-      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+      const origin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+      const direction = new THREE.Vector3(0, 0, -1).applyMatrix4(tempMatrix);
+      return { origin, direction };
+    }
+
+    function onTriggerDown(event) {
+      const controller = event.target;
+      const { origin, direction } = getControllerRay(controller);
+      raycaster.ray.origin.copy(origin);
+      raycaster.ray.direction.copy(direction);
 
       const hits = raycaster.intersectObject(cube);
       if (hits.length > 0) {
-        isHighlighted = !isHighlighted;
-        if (isHighlighted) {
-          setCubeColor(highlightColor);
-        } else {
-          cube.material.forEach((m, i) => m.color.setHex(originalColors[i]));
-        }
+        grabbingController = controller;
+        setCubeColor(highlightColor);
+        const worldPos = new THREE.Vector3();
+        cube.getWorldPosition(worldPos);
+        grabOffset.copy(worldPos).sub(origin);
+      }
+    }
+
+    function onTriggerUp(event) {
+      if (grabbingController === event.target) {
+        grabbingController = null;
+        cube.material.forEach((m, i) => m.color.setHex(originalColors[i]));
       }
     }
 
@@ -158,6 +174,10 @@
         if (!dragging) rotY += 0.003;
         cube.rotation.x = rotX;
         cube.rotation.y = rotY;
+      } else if (grabbingController) {
+        const { origin } = getControllerRay(grabbingController);
+        cube.position.copy(origin).add(grabOffset);
+        cube.rotation.y += 0.01;
       } else {
         cube.rotation.y += 0.005;
       }

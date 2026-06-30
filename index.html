@@ -52,7 +52,7 @@
 </style>
 </head>
 <body>
-  <div id="info">Drag to rotate. Tap "Enter VR" on the headset for immersive mode.</div>
+  <div id="info">Drag to rotate. In VR: point at the cube and pull the trigger.</div>
   <div id="cube-container"></div>
   <button id="vr-button" disabled>Checking VR support...</button>
 
@@ -74,6 +74,14 @@
     const cube = new THREE.Mesh(geometry, materials);
     cube.position.set(0, 1.4, -1.5);
     scene.add(cube);
+
+    const highlightColor = 0xffffff;
+    let originalColors = colors.slice();
+    let isHighlighted = false;
+
+    function setCubeColor(hex) {
+      cube.material.forEach(m => m.color.setHex(hex));
+    }
 
     const floorGeo = new THREE.PlaneGeometry(6, 6);
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
@@ -104,6 +112,46 @@
     renderer.domElement.addEventListener('touchstart', e => { const t = e.touches[0]; pointerDown(t.clientX, t.clientY); });
     renderer.domElement.addEventListener('touchmove', e => { const t = e.touches[0]; pointerMove(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
     renderer.domElement.addEventListener('touchend', pointerUp);
+
+    function buildController(index) {
+      const controller = renderer.xr.getController(index);
+      scene.add(controller);
+
+      const rayGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -1)
+      ]);
+      const rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+      const ray = new THREE.Line(rayGeo, rayMat);
+      ray.scale.z = 5;
+      ray.name = 'ray';
+      controller.add(ray);
+
+      controller.addEventListener('selectstart', onTrigger);
+      return controller;
+    }
+
+    const controller0 = buildController(0);
+    const controller1 = buildController(1);
+    const raycaster = new THREE.Raycaster();
+    const tempMatrix = new THREE.Matrix4();
+
+    function onTrigger(event) {
+      const controller = event.target;
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+      const hits = raycaster.intersectObject(cube);
+      if (hits.length > 0) {
+        isHighlighted = !isHighlighted;
+        if (isHighlighted) {
+          setCubeColor(highlightColor);
+        } else {
+          cube.material.forEach((m, i) => m.color.setHex(originalColors[i]));
+        }
+      }
+    }
 
     renderer.setAnimationLoop(() => {
       if (!renderer.xr.isPresenting) {
